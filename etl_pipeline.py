@@ -1,5 +1,24 @@
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 from pyspark.sql import SparkSession
+
+load_dotenv()
+
+# Database credentials come from the .env file (see .env.example).
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.getenv("DB_NAME", "world_economics")
+
+if not DB_PASSWORD:
+    raise SystemExit("DB_PASSWORD is not set. Copy .env.example to .env and fill it in.")
+
+# Folder holding the World Bank CSV exports and the PostgreSQL JDBC driver.
+DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
+JDBC_JAR = os.getenv("JDBC_JAR", "postgresql-42.7.3.jar")
 
 # 1. MAC & JAVA FIXES
 # This prevents the "InaccessibleObjectException" on macOS with Java 17+
@@ -8,26 +27,26 @@ os.environ['JDK_JAVA_OPTIONS'] = '--add-opens=java.base/sun.security.action=ALL-
 # 2. INITIALIZE SPARK
 spark = SparkSession.builder \
     .appName("WorldBank_ETL_Final") \
-    .config("spark.jars", "postgresql-42.7.3.jar") \
+    .config("spark.jars", JDBC_JAR) \
     .config("spark.driver.extraJavaOptions", "--add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED") \
     .getOrCreate()
 
 # 3. DEFINE THE EXACT FILENAMES FROM YOUR UPLOADS
-unemployment_csv = "API_SL.UEM.TOTL.ZS_DS2_en_csv_v2_115692.csv"
-gdp_csv          = "API_NY.GDP.MKTP.CD_DS2_en_csv_v2_126992.csv"
-inflation_csv    = "API_FP.CPI.TOTL.ZG_DS2_en_csv_v2_115367.csv"
+unemployment_csv = str(DATA_DIR / "API_SL.UEM.TOTL.ZS_DS2_en_csv_v2_115692.csv")
+gdp_csv          = str(DATA_DIR / "API_NY.GDP.MKTP.CD_DS2_en_csv_v2_126992.csv")
+inflation_csv    = str(DATA_DIR / "API_FP.CPI.TOTL.ZG_DS2_en_csv_v2_115367.csv")
 
 def load_world_bank_data(file_path):
     """Manually skips the first 4 rows to ensure the real header is captured."""
     # 1. Read the file as text lines
     raw_rdd = spark.sparkContext.textFile(file_path)
-    
+
     # 2. Filter out the first 4 rows (index 0, 1, 2, 3)
     # zipWithIndex creates (line_content, index)
     clean_rdd = raw_rdd.zipWithIndex() \
         .filter(lambda x: x[1] >= 4) \
         .map(lambda x: x[0])
-    
+
     # 3. Convert the cleaned text back into a CSV DataFrame
     return spark.read \
         .option("header", "true") \
@@ -53,10 +72,10 @@ try:
     df_inflation    = rename_cols(df_inflation)
 
     # 5. LOADING TO POSTGRESQL
-    db_url = "jdbc:postgresql://localhost:5432/world_economics"
+    db_url = f"jdbc:postgresql://{DB_HOST}:{DB_PORT}/{DB_NAME}"
     db_properties = {
-        "user": "postgres",
-        "password": "7777",  # Ensure this is your actual password
+        "user": DB_USER,
+        "password": DB_PASSWORD,
         "driver": "org.postgresql.Driver"
     }
 
@@ -69,7 +88,7 @@ try:
     print("--- Loading to PostgreSQL: table 'inflation' ---")
     df_inflation.write.jdbc(url=db_url, table="inflation", mode="overwrite", properties=db_properties)
 
-    print("\n--- ETL PROCESS COMPLETE SUCCESSFULY ---")
+    print("\n--- ETL PROCESS COMPLETE SUCCESSFULLY ---")
 
 except Exception as e:
     print(f"\n--- ERROR --- \n{e}")

@@ -1,0 +1,15 @@
+pandas
+numpy
+requests
+SQLAlchemy
+psycopg2-binary
+python-dotenv
+streamlit
+scikit-learn
+matplotlib
+seaborn
+statsmodels
+jupyter
+
+# Only needed for etl_pipeline.py (also needs Java 17+)
+pyspark

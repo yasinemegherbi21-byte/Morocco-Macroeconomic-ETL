@@ -1,2 +1,9 @@
-morocco_agriculture.code-workspace
+.env
+*.jar
+data/
+morocco_data/
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
+*.code-workspace
 Global_Unemployment_Analysis_Final.ipynb
